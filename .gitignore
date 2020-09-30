@@ -1,0 +1,13 @@
+# python
+*.pyc
+*.pyo
+*.swp
+__pycache__
+
+# tox
+/.tox
+/QCluster.egg-info
+
+# IDEs
+/.idea
+/.vscode
