@@ -1,7 +1,8 @@
 import pytest
 import asyncio
-from unittest.mock import Mock
-from qcluster.communication import HTTPCommunicator
+import aiohttp.web
+from unittest.mock import Mock, patch
+from qcluster.communication import HTTPCommunicator, _HTTPResponder
 
 
 class TestHTTPCommunicator:
@@ -59,6 +60,17 @@ class TestHTTPCommunicator:
         assert on_heartbeat.called_with('b')
 
     @pytest.mark.asyncio
+    async def test_on_heartbeat_can_return_error(self, unused_tcp_port):
+        """Test that our function can cause an error to be returned"""
+        self.communicator = HTTPCommunicator('a', unused_tcp_port)
+        await self.communicator.start()
+        on_heartbeat = Mock()
+        on_heartbeat.return_value = (False, "Error!")
+        self.communicator.set_on_heartbeat(on_heartbeat)
+        status = await self.communicator.send_heartbeat('localhost', unused_tcp_port)
+        assert status is False
+
+    @pytest.mark.asyncio
     async def test_heartbeats_timeout_after_500_ms(self, unused_tcp_port):
         self.communicator = HTTPCommunicator('a', unused_tcp_port)
 
@@ -89,3 +101,46 @@ class TestHTTPCommunicator:
         self.communicator.set_on_register(on_register)
         await self.communicator.register_with('localhost', unused_tcp_port)
         on_register.assert_called_with('localhost', unused_tcp_port, 'a')
+
+    @pytest.mark.asyncio
+    async def test_on_register_can_return_error(self, unused_tcp_port):
+        """Test that our register callback can force an error"""
+        self.communicator = HTTPCommunicator('a', unused_tcp_port)
+        await self.communicator.start()
+        on_register = Mock()
+        on_register.return_value = (False, "Error!")
+        self.communicator.set_on_register(on_register)
+        status = await self.communicator.register_with('localhost', unused_tcp_port)
+        assert status is False
+
+    @patch.object(aiohttp.web, 'Response')
+    def test_respond_text_success(self, web_response):
+        """Test that passing a success result with data returns a 200 result
+        with text in the body."""
+        cb = (True, "Go Hokies!")
+        _HTTPResponder.respond(cb)
+        web_response.assert_called_with(status=200, text="Go Hokies!")
+
+    @patch.object(aiohttp.web, 'Response')
+    def test_respond_text_failure(self, web_response):
+        """Test that passing a failure result with data returns a 400 result
+        with text in the body."""
+        cb = (False, "Go Hoos!")
+        _HTTPResponder.respond(cb)
+        web_response.assert_called_with(status=400, text="Go Hoos!")
+
+    @patch.object(aiohttp.web, 'json_response')
+    def test_respond_json_success(self, web_response):
+        """Test that passing a success result with object data returns a 200
+        result with a json result in the body."""
+        cb = (True, {"Let's go!": "Hokies!"})
+        _HTTPResponder.respond(cb)
+        web_response.assert_called_with({"Let's go!": "Hokies!"}, status=200)
+
+    @patch.object(aiohttp.web, 'json_response')
+    def test_respond_json_failure(self, web_response):
+        """Test that passing a success result with object data returns a 400
+        result with a json result in the body."""
+        cb = (False, {"Boo": "Hoo"})
+        _HTTPResponder.respond(cb)
+        web_response.assert_called_with({"Boo": "Hoo"}, status=400)

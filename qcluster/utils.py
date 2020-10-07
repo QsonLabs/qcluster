@@ -21,6 +21,26 @@ async def call_callback(callback, *args):
         call = callback(*args)
         if inspect.isawaitable(call):
             call = await call
-        return call
+        return interpret_callback_result(call)
     else:
         raise ValueError("The provided callback cannot be called!")
+
+
+def interpret_callback_result(result):
+    """
+    All callback results will be formatted as a tuple in the following form:
+    - Boolean status of the callback
+    - Any returning data from the callback
+    """
+
+    if type(result) == bool:
+        return result, None
+    elif type(result) == tuple:
+        if type(result[0]) == bool:
+            return result[0], result[1]
+        else:
+            return True, result[1]
+    elif result is None:
+        return False, None
+    else:
+        return True, result

@@ -118,6 +118,13 @@ class HTTPCommunicator:
         The callback should accept 1 parameter:
             - The identifier of the peer that sent the heartbeat
 
+        The callback should produce a return value in either of the formats:
+            - Tuple (bool, any) where the bool indicates success. Additional
+              data can be passed as along in the response.
+            - bool to indicate success
+            - None to indicate failure
+            - Any data to indicate success
+
         Args:
             on_heartbeat: The function to be called.
         """
@@ -131,6 +138,13 @@ class HTTPCommunicator:
             - The host of the new peer
             - The port of the new peer
             - The identifier of the new peer
+
+        The callback should produce a return value in either of the formats:
+            - Tuple (bool, any) where the bool indicates success. Additional
+              data can be passed as along in the response.
+            - bool to indicate success
+            - None to indicate failure
+            - Any data to indicate success
 
         Args:
             on_register: The function to be called.
@@ -229,6 +243,16 @@ class _HTTPResponder:
         self.site = aiohttp.web.TCPSite(self.runner, self.host, self.port)
         await self.site.start()
 
+    @staticmethod
+    def respond(callback_response):
+        success = callback_response[0]
+        data = callback_response[1]
+        status_code = 200 if success else 400
+        if type(data) is dict:
+            return web.json_response(data, status=status_code)
+        else:
+            return web.Response(status=status_code, text=str(data))
+
     # MARK: handler methods
 
     async def handle_ping(self, request):
@@ -257,7 +281,9 @@ class _HTTPResponder:
         data = await request.post()
         peer_identifier = data.get('peer_identifier', None)
         if self.on_heartbeat:
-            await utils.call_callback(self.on_heartbeat, peer_identifier)
+            res = await utils.call_callback(self.on_heartbeat,
+                                            peer_identifier)
+            return self.respond(res)
         return web.Response(status=200)
 
     async def handle_register(self, request):
@@ -276,10 +302,11 @@ class _HTTPResponder:
         peer_port = data.get('port', None)
         peer_identifier = data.get('identifier', None)
         if self.on_register:
-            await utils.call_callback(self.on_register,
-                                      peer_host,
-                                      int(peer_port),
-                                      peer_identifier)
+            res = await utils.call_callback(self.on_register,
+                                            peer_host,
+                                            int(peer_port),
+                                            peer_identifier)
+            return self.respond(res)
         return web.Response(status=200)
 
     # MARK: callback registration

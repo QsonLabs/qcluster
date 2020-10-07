@@ -27,11 +27,14 @@ class QCluster(object):
             for peer in self.peers:
                 host = peer['host']
                 port = peer['port']
-                await self.communicator.send_heartbeat(host, port)
+                st = await self.communicator.send_heartbeat(host, port)
+                if not st:
+                    print("Heartbeat rejected by peer")
             await asyncio.sleep(2)
 
     def on_beat(self, peer_identifier):
         print(peer_identifier)
+        return True
 
     def is_leader(self):
         return False
