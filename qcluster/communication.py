@@ -1,8 +1,12 @@
 import aiohttp
+import asyncio
 import async_timeout
+import logging
 
 from aiohttp import web
 from qcluster import utils
+
+logger = logging.getLogger(__name__)
 
 
 class HTTPCommunicator:
@@ -36,7 +40,9 @@ class HTTPCommunicator:
 
         This needs to be called before requests will be accepted.
         """
+        logger.debug("starting comms...")
         await self._responder.start_server()
+        logger.debug("comms started!")
 
     async def ping(self, host, port, timeout=1):
         """
@@ -56,33 +62,45 @@ class HTTPCommunicator:
         try:
             response = await self._requester.get(host, port, '/ping', timeout)
             return response.status == 200
-        except aiohttp.client_exceptions.ClientConnectorError:
+        except aiohttp.client_exceptions.ClientOSError:
+            return False
+        except asyncio.exceptions.TimeoutError:
             return False
 
-    async def send_heartbeat(self, to_host, to_port, timeout=1):
+    async def send_heartbeat(self, host, port, term, timeout=1):
         """
         Sends a heartbeat message to a peer.
 
         Args:
-            to_host: The host to send the heartbeat to.
-            to_port: The port on the host to send the heartbeat to.
-            timeout: Optional; THe maximum time in seconds to wait for a
+            host: The host to send the heartbeat to.
+            port: The port on the host to send the heartbeat to.
+            term: The current term of the leader sending the heartbeat.
+            timeout: Optional; The maximum time in seconds to wait for a
               response. (Default=1)
 
         Returns:
             True if the peer acknowledges the heartbeat. False indicates an
             invalid response from the peer or connectivity issues.
         """
+        logger.info("Sending heartbeat to {}:{}".format(host, port))
         try:
-            payload = {'peer_identifier': self.identifier}
-            response = await self._requester.post(to_host,
-                                                  to_port,
-                                                  '/heartbeat',
+            endpoint = "/raft/heartbeat"
+            payload = {
+                'identifier': self.identifier,
+                'term': term
+            }
+            response = await self._requester.post(host,
+                                                  port,
+                                                  endpoint,
                                                   payload,
                                                   timeout)
             return response.status == 200
-        except aiohttp.client_exceptions.ClientConnectorError:
-            return None
+        except aiohttp.client_exceptions.ClientOSError:
+            logger.error("ClientOSError")
+            return False
+        except asyncio.exceptions.TimeoutError:
+            logger.error("TimeoutError")
+            return False
 
     async def register_with(self, host, port, timeout=1):
         """
@@ -179,7 +197,7 @@ class _HTTPRequester:
         """
         async with aiohttp.ClientSession() as session:
             url = "http://{}:{}{}".format(host, port, endpoint)
-            print("Making GET request to {}".format(url))
+            logger.debug("Making GET request to {}".format(url))
             async with async_timeout.timeout(timeout):
                 return await session.get(url)
 
@@ -201,11 +219,17 @@ class _HTTPRequester:
         Raises:
             asyncio.TimeoutError: The request exceeded the timeout duration.
         """
+        response = None
         async with aiohttp.ClientSession() as session:
             url = "http://{}:{}{}".format(host, port, endpoint)
-            print("Making POST request to {} with data: {}".format(url, data))
+            logger.debug("Making POST request to {} with data: {}".format(
+                url, data
+            ))
             async with async_timeout.timeout(timeout):
-                return await session.post(url, data=data)
+                response = await session.post(url, data=data)
+            # Delay to let the session close without dumb errors
+            await asyncio.sleep(0.0001)
+        return response
 
 
 class _HTTPResponder:
@@ -226,7 +250,7 @@ class _HTTPResponder:
 
         self.app = web.Application()
         self.app.router.add_get('/ping', self.handle_ping)
-        self.app.router.add_post('/heartbeat', self.handle_heartbeat)
+        self.app.router.add_post('/raft/heartbeat', self.handle_heartbeat)
         self.app.router.add_post('/register', self.handle_register)
         self.runner = None
         self.site = None
@@ -279,7 +303,7 @@ class _HTTPResponder:
             An aiohttp response object.
          """
         data = await request.post()
-        peer_identifier = data.get('peer_identifier', None)
+        peer_identifier = data.get('identifier', None)
         if self.on_heartbeat:
             res = await utils.call_callback(self.on_heartbeat,
                                             peer_identifier)

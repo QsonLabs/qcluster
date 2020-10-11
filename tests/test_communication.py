@@ -34,20 +34,29 @@ class TestHTTPCommunicator:
         assert await self.communicator.ping('localhost', 0) is False
 
     @pytest.mark.asyncio
+    async def test_ping_timeout(self, unused_tcp_port):
+        self.communicator = HTTPCommunicator('a', unused_tcp_port)
+        await self.communicator.start()
+        status = await self.communicator.ping('localhost',
+                                              unused_tcp_port,
+                                              timeout=0)
+        assert status is False
+
+    @pytest.mark.asyncio
     async def test_heartbeat_returns_true(self):
         """Test that sending a heartbeat returns with response code 200"""
         self.communicator = HTTPCommunicator('a', 7000)
         await self.communicator.start()
-        status = self.communicator.send_heartbeat('localhost', 7000)
+        status = self.communicator.send_heartbeat('localhost', 7000, 1)
         assert await status is True
 
     @pytest.mark.asyncio
-    async def test_heartbeat_returns_none_on_error(self, unused_tcp_port):
+    async def test_heartbeat_returns_false_on_error(self, unused_tcp_port):
         """Test that nothing returns on a connection error"""
         self.communicator = HTTPCommunicator('a', unused_tcp_port)
         await self.communicator.start()
-        status = self.communicator.send_heartbeat('localhost', 0)
-        assert await status is None
+        status = self.communicator.send_heartbeat('localhost', 0, 1)
+        assert await status is False
 
     @pytest.mark.asyncio
     async def test_on_heartbeat_executes(self, unused_tcp_port):
@@ -56,7 +65,7 @@ class TestHTTPCommunicator:
         await self.communicator.start()
         on_heartbeat = Mock()
         self.communicator.set_on_heartbeat(on_heartbeat)
-        await self.communicator.send_heartbeat('localhost', unused_tcp_port)
+        await self.communicator.send_heartbeat('localhost', unused_tcp_port, 1)
         assert on_heartbeat.called_with('b')
 
     @pytest.mark.asyncio
@@ -67,7 +76,7 @@ class TestHTTPCommunicator:
         on_heartbeat = Mock()
         on_heartbeat.return_value = (False, "Error!")
         self.communicator.set_on_heartbeat(on_heartbeat)
-        status = await self.communicator.send_heartbeat('localhost', unused_tcp_port)
+        status = await self.communicator.send_heartbeat('localhost', unused_tcp_port, 1)
         assert status is False
 
     @pytest.mark.asyncio
@@ -79,10 +88,11 @@ class TestHTTPCommunicator:
 
         self.communicator.set_on_heartbeat(long_callback)
         await self.communicator.start()
-        with pytest.raises(asyncio.TimeoutError):
-            await self.communicator.send_heartbeat('localhost',
-                                                   unused_tcp_port,
-                                                   timeout=0.5)
+        status = await self.communicator.send_heartbeat('localhost',
+                                                        unused_tcp_port,
+                                                        1,
+                                                        timeout=0.5)
+        assert status is False
 
     @pytest.mark.asyncio
     async def test_register_returns_true(self, unused_tcp_port):

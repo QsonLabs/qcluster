@@ -38,31 +38,37 @@ class TestUtils:
             await utils.call_callback(5)
 
     def test_interpret_callback_result_boolean(self):
+        """Test that a callback result is transformed into the right format."""
         r_true = utils.interpret_callback_result(True)
         r_false = utils.interpret_callback_result(False)
         assert r_true == (True, None)
         assert r_false == (False, None)
 
     def test_interpret_callback_result_dual_tuple(self):
+        """Test that a callback result is transformed into the right format."""
         r_true = utils.interpret_callback_result((True, 67))
         r_false = utils.interpret_callback_result((False, {'e': 'fail'}))
         assert r_true == (True, 67)
         assert r_false == (False, {'e': 'fail'})
 
     def test_interpret_callback_result_dual_tuple_data_first(self):
+        """Test that a callback result is transformed into the right format."""
         r_true = utils.interpret_callback_result((128, 67))
         assert r_true == (True, 67)
 
     def test_interpret_callback_result_3_tuple(self):
+        """Test that a callback result is transformed into the right format."""
         r_true = utils.interpret_callback_result((True, 67, 8))
         r_false = utils.interpret_callback_result((False, {'e': 'fail'}, False))
         assert r_true == (True, 67)
         assert r_false == (False, {'e': 'fail'})
 
     def test_interpret_callback_response_none(self):
+        """Test that a callback result is transformed into the right format."""
         r = utils.interpret_callback_result(None)
         assert r == (False, None)
 
     def test_interpret_callback_response_only_data(self):
+        """Test that a callback result is transformed into the right format."""
         r = utils.interpret_callback_result(5)
         assert r == (True, 5)

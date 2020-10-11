@@ -1,12 +1,15 @@
 import asyncio
+import logging
 from qcluster.communication import HTTPCommunicator
+
+logger = logging.getLogger(__name__)
 
 
 class QCluster(object):
     def __init__(self,
-                 identifier,
-                 listen_port,
+                 identifier='',
                  listen_host='localhost',
+                 listen_port=0,
                  peers=[]):
         self.identifier = identifier
         self.listen_host = listen_host
@@ -24,16 +27,20 @@ class QCluster(object):
 
     async def pinger(self):
         while True:
+            heartbeats = []
             for peer in self.peers:
                 host = peer['host']
                 port = peer['port']
-                st = await self.communicator.send_heartbeat(host, port)
-                if not st:
-                    print("Heartbeat rejected by peer")
-            await asyncio.sleep(2)
+                # st = await self.communicator.send_heartbeat(host, port)
+                # if not st:
+                #     self.logger.info("Heartbeat rejected by peer")
+                heartbeats.append(self.communicator.send_heartbeat(host, port))
+            results = await asyncio.gather(*heartbeats)
+            print(results)
+            await asyncio.sleep(0.3)
 
     def on_beat(self, peer_identifier):
-        print(peer_identifier)
+        logger.info("Got heartbeat from {}".format(peer_identifier))
         return True
 
     def is_leader(self):
