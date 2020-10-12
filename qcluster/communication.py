@@ -40,9 +40,7 @@ class HTTPCommunicator:
 
         This needs to be called before requests will be accepted.
         """
-        logger.debug("starting comms...")
         await self._responder.start_server()
-        logger.debug("comms started!")
 
     async def ping(self, host, port, timeout=1):
         """
@@ -67,14 +65,14 @@ class HTTPCommunicator:
         except asyncio.exceptions.TimeoutError:
             return False
 
-    async def send_heartbeat(self, host, port, term, timeout=1):
+    async def send_heartbeat(self, host, port, data, timeout=1):
         """
         Sends a heartbeat message to a peer.
 
         Args:
             host: The host to send the heartbeat to.
             port: The port on the host to send the heartbeat to.
-            term: The current term of the leader sending the heartbeat.
+            data: The data to include in the transmitted message.
             timeout: Optional; The maximum time in seconds to wait for a
               response. (Default=1)
 
@@ -82,25 +80,63 @@ class HTTPCommunicator:
             True if the peer acknowledges the heartbeat. False indicates an
             invalid response from the peer or connectivity issues.
         """
-        logger.info("Sending heartbeat to {}:{}".format(host, port))
+        if data is None:
+            data = {}
+        if type(data) != dict:
+            logger.error("The data parameter needs to be a dict!")
+            raise ValueError
+
+        logger.debug("Sending heartbeat to {}:{}".format(host, port))
         try:
             endpoint = "/raft/heartbeat"
-            payload = {
-                'identifier': self.identifier,
-                'term': term
-            }
             response = await self._requester.post(host,
                                                   port,
                                                   endpoint,
-                                                  payload,
+                                                  data,
                                                   timeout)
-            return response.status == 200
+            return_data = None
+            try:
+                return_data = await response.json()
+            finally:
+                return response.status == 200, return_data
         except aiohttp.client_exceptions.ClientOSError:
             logger.error("ClientOSError")
-            return False
+            return False, None
         except asyncio.exceptions.TimeoutError:
             logger.error("TimeoutError")
-            return False
+            return False, None
+
+    async def request_vote(self, host, port, data, timeout=1):
+        """
+        Sends a request vote command to the target host and port.
+
+        Args:
+            host: The target host.
+            port: The target port.
+            data: The data to pass in the message.
+            timeout: Optional; The time in seconds to wait for a response.
+                (Default=1)
+
+        """
+        logger.debug("Sending request_vote to {}:{}".format(host, port))
+        try:
+            endpoint = "/raft/request_vote"
+            response = await self._requester.post(host,
+                                                  port,
+                                                  endpoint,
+                                                  data,
+                                                  timeout)
+            return_data = None
+            try:
+                return_data = await response.json()
+            finally:
+                return response.status == 200, return_data
+        except aiohttp.client_exceptions.ClientOSError:
+            logger.error("ClientOSError")
+            return False, None
+        except asyncio.exceptions.TimeoutError:
+            logger.error("TimeoutError")
+            return False, None
 
     async def register_with(self, host, port, timeout=1):
         """
@@ -117,6 +153,7 @@ class HTTPCommunicator:
         Returns:
             True if the registration was successful.
         """
+        endpoint = "/raft/register"
         payload = {
             'host': self.listen_host,
             'port': self.listen_port,
@@ -124,7 +161,7 @@ class HTTPCommunicator:
         }
         response = await self._requester.post(host,
                                               port,
-                                              '/register',
+                                              endpoint,
                                               payload,
                                               timeout)
         return response.status == 200
@@ -133,8 +170,7 @@ class HTTPCommunicator:
         """
         Setter for the callback to be executed on heartbeat events.
 
-        The callback should accept 1 parameter:
-            - The identifier of the peer that sent the heartbeat
+        The callback should accept 1 parameter that contains heartbeat data.
 
         The callback should produce a return value in either of the formats:
             - Tuple (bool, any) where the bool indicates success. Additional
@@ -168,6 +204,9 @@ class HTTPCommunicator:
             on_register: The function to be called.
         """
         self._responder.set_on_register(on_register)
+
+    def set_on_request_vote(self, on_request_vote):
+        self._responder.set_on_request_vote(on_request_vote)
 
 
 class _HTTPRequester:
@@ -226,7 +265,8 @@ class _HTTPRequester:
                 url, data
             ))
             async with async_timeout.timeout(timeout):
-                response = await session.post(url, data=data)
+                # response = await session.post(url, data=data)
+                response = await session.post(url, json=data)
             # Delay to let the session close without dumb errors
             await asyncio.sleep(0.0001)
         return response
@@ -249,14 +289,29 @@ class _HTTPResponder:
         self.port = port
 
         self.app = web.Application()
-        self.app.router.add_get('/ping', self.handle_ping)
-        self.app.router.add_post('/raft/heartbeat', self.handle_heartbeat)
-        self.app.router.add_post('/register', self.handle_register)
         self.runner = None
         self.site = None
 
+        self.routes_get = {
+            '/ping': self.handle_ping
+        }
+        self.routes_post = {
+            '/raft/heartbeat': self.handle_heartbeat,
+            '/raft/register': self.handle_register,
+            '/raft/request_vote': self.handle_request_vote
+        }
+
         self.on_heartbeat = None
         self.on_register = None
+        self.on_request_vote = None
+
+        self.setup_server()
+
+    def setup_server(self):
+        for route, handler in self.routes_get.items():
+            self.app.router.add_get(route, handler)
+        for route, handler in self.routes_post.items():
+            self.app.router.add_post(route, handler)
 
     async def start_server(self):
         """
@@ -302,11 +357,10 @@ class _HTTPResponder:
         Returns:
             An aiohttp response object.
          """
-        data = await request.post()
-        peer_identifier = data.get('identifier', None)
         if self.on_heartbeat:
+            data = await request.json()
             res = await utils.call_callback(self.on_heartbeat,
-                                            peer_identifier)
+                                            data)
             return self.respond(res)
         return web.Response(status=200)
 
@@ -321,11 +375,11 @@ class _HTTPResponder:
         Returns:
             An aiohttp response object.
         """
-        data = await request.post()
-        peer_host = data.get('host', None)
-        peer_port = data.get('port', None)
-        peer_identifier = data.get('identifier', None)
         if self.on_register:
+            data = await request.json()
+            peer_host = data.get('host', None)
+            peer_port = data.get('port', None)
+            peer_identifier = data.get('identifier', None)
             res = await utils.call_callback(self.on_register,
                                             peer_host,
                                             int(peer_port),
@@ -333,14 +387,31 @@ class _HTTPResponder:
             return self.respond(res)
         return web.Response(status=200)
 
+    async def handle_request_vote(self, request):
+        """
+        Handler for the request vite action. A callback can be set
+        to handle specific events by an external module.
+
+        Args:
+            request: The aiohttp request object.
+
+        Returns:
+            An aiohttp response object.
+        """
+        if self.on_request_vote:
+            data = await request.json()
+            res = await utils.call_callback(self.on_request_vote,
+                                            data)
+            return self.respond(res)
+        return web.Response(status=400)
+
     # MARK: callback registration
 
     def set_on_heartbeat(self, on_heartbeat):
         """
         Setter for the callback to be executed on heartbeat events.
 
-        The callback should accept 1 parameter:
-            - The identifier of the peer that sent the heartbeat
+        The callback should accept 1 parameter with heartbeat data.
 
         Args:
             on_heartbeat: The function to be called.
@@ -360,3 +431,12 @@ class _HTTPResponder:
             on_register: The function to be called.
         """
         self.on_register = on_register
+
+    def set_on_request_vote(self, on_request_vote):
+        """
+        Setter for the callback to be executed on request_vote events.
+
+        Args:
+            on_request_vote: The function to be called.
+        """
+        self.on_request_vote = on_request_vote
