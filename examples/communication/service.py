@@ -29,8 +29,10 @@ async def main():
     while True:
         if cluster.is_leader():
             logger.info("I am the leader!")
-        logger.info("{} is doing some work...".format(identifier))
-        await asyncio.sleep(5)
+            logger.info("{} is doing some work...".format(identifier))
+        else:
+            logger.info("I am not the leader :(")
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
     asyncio.run(main())

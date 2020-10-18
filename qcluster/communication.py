@@ -100,7 +100,7 @@ class HTTPCommunicator:
             finally:
                 return response.status == 200, return_data
         except aiohttp.client_exceptions.ClientOSError:
-            logger.error("ClientOSError")
+            # logger.error("ClientOSError")
             return False, None
         except asyncio.exceptions.TimeoutError:
             logger.error("TimeoutError")
@@ -132,7 +132,7 @@ class HTTPCommunicator:
             finally:
                 return response.status == 200, return_data
         except aiohttp.client_exceptions.ClientOSError:
-            logger.error("ClientOSError")
+            # logger.error("ClientOSError")
             return False, None
         except asyncio.exceptions.TimeoutError:
             logger.error("TimeoutError")
