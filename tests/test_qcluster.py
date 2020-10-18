@@ -1,6 +1,11 @@
+import pytest
+
 from qcluster import QCluster
 
 
-def test_qcluster():
-    cluster = QCluster(5)
-    assert cluster.get_x() == 5
+class TestQCluster:
+
+    @pytest.mark.asyncio
+    async def test_qcluster(self, unused_tcp_port):
+        cluster = QCluster('test_identifier', unused_tcp_port)
+        assert cluster.is_leader() is False

@@ -1,0 +1,9 @@
+{
+    "identifier": "service_c",
+    "listen_host": "localhost",
+    "listen_port": 7003,
+    "peers": [
+        {"host": "localhost", "port": 7001},
+        {"host": "localhost", "port": 7002}
+    ]
+}

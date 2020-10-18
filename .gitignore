@@ -11,3 +11,9 @@ __pycache__
 # IDEs
 /.idea
 /.vscode
+
+# Others
+/.coverage
+/docs/
+/venv/
+/htmlcov/
