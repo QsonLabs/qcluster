@@ -7,6 +7,7 @@ from aiohttp import web
 from qcluster import utils
 
 logger = logging.getLogger(__name__)
+aiohttp_logger = logging.getLogger("{}.aiohttp".format(__name__))
 
 
 class HTTPCommunicator:
@@ -317,7 +318,7 @@ class _HTTPResponder:
         """
         Starts listening on the host and port for HTTP requests.
         """
-        self.runner = web.AppRunner(self.app)
+        self.runner = web.AppRunner(self.app, logger=aiohttp_logger)
         await self.runner.setup()
         self.site = aiohttp.web.TCPSite(self.runner, self.host, self.port)
         await self.site.start()

@@ -1,0 +1,10 @@
+{
+    "identifier": "server_c",
+    "server_port": 8003,
+    "listen_host": "localhost",
+    "listen_port": 7003,
+    "peers": [
+        {"host": "localhost", "port": 7001, "identifier":  "server_a", "metadata": {"server_port":  8001}},
+        {"host": "localhost", "port": 7002, "identifier":  "server_b", "metadata": {"server_port":  8002}}
+    ]
+}

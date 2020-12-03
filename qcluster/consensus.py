@@ -1,6 +1,10 @@
 from enum import Enum
 import asyncio
 import random
+import logging
+import time
+
+logger = logging.getLogger(__name__)
 
 
 class PeerState(Enum):
@@ -13,7 +17,7 @@ class PeerState(Enum):
 class RaftConsensus:
     def __init__(self,
                  communicator,
-                 peers=[],
+                 registry,
                  min_timeout=0.150,
                  max_timeout=0.300):
         """
@@ -21,12 +25,13 @@ class RaftConsensus:
         and consensus.
         """
         self.term = 0
-        self.peers = peers
+        self.registry = registry
         self.communicator = communicator
         self.communicator.set_on_heartbeat(self.on_heartbeat)
         self.communicator.set_on_request_vote(self.on_request_vote)
 
         self.state = PeerState.FOLLOWER
+        self.known_leader = None
         self.min_timeout = min_timeout
         self.max_timeout = max_timeout
         self.has_voted_in_term = False
@@ -50,41 +55,50 @@ class RaftConsensus:
             except asyncio.exceptions.TimeoutError:
                 self.state = PeerState.CANDIDATE
                 self.term += 1
+                self.known_leader = None
         elif self.state == PeerState.CANDIDATE:
-            # self.has_voted_in_term = True
+            logger.debug("I am starting an election for term {}"
+                         .format(self.term))
+            timeout = self.get_timeout()
+            t_start = time.time()
             self.got_heartbeat.clear()
             # Send a request vote to all peers
             requests = []
-            for peer in self.peers:
-                host = peer.get('host')
-                port = peer.get('port')
+            for peer in self.registry.peers:
+                host = peer.host
+                port = peer.port
                 data = {
                     'identifier': self.communicator.identifier,
                     'term': self.term
                 }
                 call = self.communicator.request_vote(host, port, data)
-                requests.append(asyncio.wait_for(call, timeout=self.get_timeout()))
+                requests.append(asyncio.wait_for(call, timeout=timeout))
             self.has_voted_in_term = True
             results = await asyncio.gather(*requests, return_exceptions=True)
-            if not self.got_heartbeat.is_set():
+            if not self.got_heartbeat.is_set() and self.is_candidate():
                 # Loop through our results and tally votes
                 votes = 1
                 for ballot in results:
-                    valid = type(ballot) == tuple and ballot[0] and type(ballot[1]) is dict
-                    if valid and ballot[1].get('vote_granted', False):
+                    if self.parse_ballot(ballot):
                         votes += 1
-                outcome = (votes / (len(self.peers) + 1))
+                outcome = (votes / (self.registry.get_peer_count() + 1))
                 majority = outcome > 0.5
-                print("I got {} of the votes".format(outcome))
+                logger.debug("I got {} of the votes on term {}"
+                             .format(outcome, self.term))
                 if majority:
                     self.state = PeerState.LEADER
+                    self.known_leader = self.communicator.identifier
+                else:
+                    duration = time.time() - t_start
+                    await asyncio.sleep(timeout - duration)
+                    self.term += 1
         elif self.state == PeerState.LEADER:
-            # Periodically send a heartbeat to all known peers
-            await asyncio.sleep(0.050)
+            logger.info("I am the leader for term {}".format(self.term))
+            t_start = time.time()
             requests = []
-            for peer in self.peers:
-                host = peer.get('host')
-                port = peer.get('port')
+            for peer in self.registry.peers:
+                host = peer.host
+                port = peer.port
                 data = {
                     'identifier': self.communicator.identifier,
                     'term': self.term
@@ -92,6 +106,8 @@ class RaftConsensus:
                 call = self.communicator.send_heartbeat(host, port, data)
                 requests.append(asyncio.wait_for(call, timeout=0.100))
             await asyncio.gather(*requests, return_exceptions=True)
+            duration = time.time() - t_start
+            await asyncio.sleep(0.050 - duration)
 
     def on_heartbeat(self, data):
         """
@@ -99,27 +115,24 @@ class RaftConsensus:
             - identifier
             - leader's term
         """
-        # leader_identifier = data.get('identifier', None)
+        leader_identifier = data.get('identifier', None)
         leader_term = data.get('term', -1)
+        valid_beat = False
 
         if self.state == PeerState.CANDIDATE and leader_term >= self.term:
-            self.state = PeerState.FOLLOWER
-            self.got_heartbeat.set()
+            valid_beat = True
         elif self.state == PeerState.LEADER and self.term < leader_term:
-            self.state = PeerState.FOLLOWER
-            self.got_heartbeat.set()
+            valid_beat = True
         elif self.state == PeerState.FOLLOWER and leader_term >= self.term:
-            self.term = leader_term
-            self.got_heartbeat.set()
+            valid_beat = True
 
-        """
-        if self.term < leader_term:
-            if self.state in (PeerState.LEADER, PeerState.CANDIDATE):
-                self.state = PeerState.FOLLOWER
-            else:
-                self.term = leader_term
-        """
-        # self.got_heartbeat.set()
+        if valid_beat:
+            self.state = PeerState.FOLLOWER
+            self.known_leader = leader_identifier
+            self.term = leader_term
+            logger.debug("I got a heartbeat for term {} from {}"
+                         .format(self.term, leader_identifier))
+            self.got_heartbeat.set()
 
     def on_request_vote(self, data):
         """
@@ -127,20 +140,73 @@ class RaftConsensus:
             - identifier
             - leader's term
         """
-        # leader_identifier = data.get('identifier', None)
+        leader_identifier = data.get('identifier', None)
         candidate_term = data.get('term', -1)
-        if candidate_term < self.term or self.has_voted_in_term:
-            return True, {"vote_granted": False}
-        else:
+        if candidate_term > self.term:
+            self.term = candidate_term
+            self.state = PeerState.FOLLOWER
             self.has_voted_in_term = True
+            logger.debug("I just voted for {} for term {}"
+                         .format(leader_identifier, candidate_term))
             return True, {"vote_granted": True}
 
-        """
-        if not self.has_voted_in_term:
-            # We will vote for this candidate
-            self.has_voted_in_term = True
-            return True, {"vote_granted": True}
-        else:
-            # Already voted
+        if candidate_term < self.term or self.has_voted_in_term:
+            logger.debug("I decline to voted for {} for term {}"
+                         .format(leader_identifier, candidate_term))
             return True, {"vote_granted": False}
+        else:
+            self.has_voted_in_term = True
+            logger.debug("I just voted for {} for term {}"
+                         .format(leader_identifier, candidate_term))
+            return True, {"vote_granted": True}
+
+    # MARK: Helper functions
+
+    @staticmethod
+    def parse_ballot(ballot):
         """
+        Helper function to parse a response from request_vote.
+
+        An example of the data:
+            True, {"vote_granted": True}
+        """
+
+        # Ensure we got a tuple
+        if type(ballot) != tuple:
+            logger.error("Unable to parse ballot: {}".format(ballot))
+            return False
+
+        # Ensure the tuple has 2 fields
+        if len(ballot) != 2:
+            logger.error("Only expected 2 fields in the ballot: {}"
+                         .format(ballot))
+            return False
+
+        # Check the first field is a bool
+        part_1, part_2 = ballot[0], ballot[1]
+        if type(part_1) != bool:
+            logger.error("Expected a bool in position 1: {}".format(ballot))
+            return False
+
+        # We only inspect the ballot if the first part is True
+        if not part_1:
+            return False
+
+        if type(part_2) != dict:
+            logger.error("Expected a dict in position 2: {}".format(ballot))
+            return False
+
+        # Return the vote_granted field from the data
+        return part_2.get('vote_granted', False)
+
+    def is_candidate(self):
+        """Helper to determine if we are a candidate"""
+        return self.state == PeerState.CANDIDATE
+
+    def is_leader(self):
+        """Helper to determine if we are a leader"""
+        return self.state == PeerState.LEADER
+
+    def is_follower(self):
+        """Helper to determine if we are a follower"""
+        return self.state == PeerState.FOLLOWER
