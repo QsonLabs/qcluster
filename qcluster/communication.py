@@ -7,6 +7,7 @@ from aiohttp import web
 from qcluster import utils
 
 logger = logging.getLogger(__name__)
+aiohttp_logger = logging.getLogger("{}.aiohttp".format(__name__))
 
 
 class HTTPCommunicator:
@@ -100,7 +101,7 @@ class HTTPCommunicator:
             finally:
                 return response.status == 200, return_data
         except aiohttp.client_exceptions.ClientOSError:
-            logger.error("ClientOSError")
+            # logger.error("ClientOSError")
             return False, None
         except asyncio.exceptions.TimeoutError:
             logger.error("TimeoutError")
@@ -132,7 +133,7 @@ class HTTPCommunicator:
             finally:
                 return response.status == 200, return_data
         except aiohttp.client_exceptions.ClientOSError:
-            logger.error("ClientOSError")
+            # logger.error("ClientOSError")
             return False, None
         except asyncio.exceptions.TimeoutError:
             logger.error("TimeoutError")
@@ -317,7 +318,7 @@ class _HTTPResponder:
         """
         Starts listening on the host and port for HTTP requests.
         """
-        self.runner = web.AppRunner(self.app)
+        self.runner = web.AppRunner(self.app, logger=aiohttp_logger)
         await self.runner.setup()
         self.site = aiohttp.web.TCPSite(self.runner, self.host, self.port)
         await self.site.start()

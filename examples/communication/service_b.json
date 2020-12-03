@@ -3,7 +3,8 @@
     "listen_host": "localhost",
     "listen_port": 7002,
     "peers": [
-        {"host": "localhost", "port": 7001},
-        {"host": "localhost", "port": 7003}
+        {"host": "localhost", "port": 7001, "identifier":  "service_a"},
+        {"host": "localhost", "port": 7003, "identifier":  "service_c"},
+        {"host": "localhost", "port": 7004, "identifier":  "service_d"}
     ]
 }
