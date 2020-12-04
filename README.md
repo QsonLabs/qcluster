@@ -92,7 +92,7 @@ Leader has custom metadata of: {"custom_field": 5"}
 
 Some examples of using QCluster are shown below using the following configuration file (adapted for individual peers with the appropriate fields changed).
 
-```
+```JSON
 {
     "identifier": "server_a",
     "listen_host": "localhost",
@@ -112,11 +112,11 @@ The configuration file for peers `server_b` and `server_c` would be formatted si
 
 A peer can have custom metadata associated with it in the configuration file. Changing a peer entry to:
 
-```
+```JSON
 {"host": "localhost", "port": 7002, "identifier":  "server_b", "metadata": {"server_port":  8002}}
 ```
 
-results in this peer having the data `{"server_port": 8002}` accessible to all other peers. Therefore, follower peers can have access to more information about the elected leader to perform more complex tasks as a follower (such as redirecting one's traffic to the leader).
+results in this peer having the data `{"server_port": 8002}` accessible to all other peers in the `metadata` property. Therefore, follower peers can have access to more information about the elected leader to perform more complex tasks as a follower (such as redirecting one's traffic to the leader).
 
 ### Bare Minimum
 ```py
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Running this program with the 3 version of the configuration file for `server_a`, `server_b`, and `server_c` would result in a single peer becoming leader. The work loop of each peer would then either do "work" if it was the leader, or sit idle until it becomes the leader.
+Running this program with the 3 versions of the configuration file for `server_a`, `server_b`, and `server_c` would result in a single peer becoming leader. The work loop of each peer would then either do "work" if it was the leader, or sit idle until it becomes the leader.
 
 ### Advanced Examples
 
