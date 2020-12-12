@@ -4,6 +4,10 @@
 *.swp
 __pycache__
 
+# build
+build/
+dist/
+
 # tox
 /.tox
 /QCluster.egg-info
