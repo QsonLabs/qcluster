@@ -1,4 +1,18 @@
 import setuptools
+import re
+import os
+
+
+def get_version():
+    """Enables single source versioning by considering base project __init__.py authoritative source"""
+    semver_re = re.compile(r"""^__version__[\s=]+["'](\d+\.\d+\.\d+)["'\s]+$""")
+    init_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "qcluster/__init__.py")
+    with open(init_path, "r") as f:
+        for line in f:
+            match = semver_re.match(line)
+            if match:
+                return match.group(1)
+    raise ValueError("Problem determining version from qcluster init file: %s" % (init_path))
 
 
 def get_readme_md_contents():
@@ -9,7 +23,7 @@ def get_readme_md_contents():
 
 setuptools.setup(
     name="QCluster",
-    version="0.0.1",
+    version=get_version(),
     author="Aaron Rohrbaugh + (See GitHub)",
     author_email="chriso@qsonlabs.com",
     maintainer="Chris O'Connor",
