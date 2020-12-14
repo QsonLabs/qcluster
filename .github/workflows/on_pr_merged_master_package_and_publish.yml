@@ -1,16 +1,13 @@
 name: Package and Publish on Master Push
 
-on:
-  workflow_dispatch:
-    branches:
-     # this will change to master once validated
-      - initial-deployment
+on: workflow_dispatch
   
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: [3.8]
     steps:
     - uses: actions/checkout@v2
