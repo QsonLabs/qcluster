@@ -67,5 +67,5 @@ jobs:
         TWINE_USERNAME: __token__
         TWINE_TOKEN: ${{ secrets.QL_TESTPYPI_QCLUSTER }}
       run: |
-        twine check qcluster-pydist/*
-        twine upload qcluster-pydist/*
+        twine check .artifacts/*
+        twine upload .artifacts/*
