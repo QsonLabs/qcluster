@@ -53,7 +53,7 @@ jobs:
     - name: Install twine wheel
       run: |
         python -m pip install --upgrade pip
-        pip install twine wheel keyring
+        pip install twine wheel 
     - name: Download build packages
       uses: actions/download-artifact@v2
       with:
@@ -65,7 +65,7 @@ jobs:
       env:
         TWINE_REPOSITORY_URL: https://test.pypi.org/legacy
         TWINE_USERNAME: __token__
-        TWINE_TOKEN: ${{ secrets.QL_TESTPYPI_QCLUSTER }}
+        TWINE_PASSWORD: ${{ secrets.QL_TESTPYPI_QCLUSTER }}
       run: |
         cd artifacts
         twine check *
