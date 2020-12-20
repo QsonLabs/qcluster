@@ -58,6 +58,9 @@ jobs:
       uses: actions/download-artifact@v2
       with:
           name: qcluster-pydist
+          path: artifacts/
+    - name: Display structure of downloaded artifacts
+      run: ls -R
     - name: Upload to Test PYPI
       env:
         TWINE_REPOSITORY_URL: https://test.pypi.org/legacy
