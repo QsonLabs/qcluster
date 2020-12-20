@@ -58,11 +58,12 @@ jobs:
       uses: actions/download-artifact@v2
       with:
           name: qcluster-pydist
+          path: artifacts/
     - name: Upload to Test PYPI
       env:
         TWINE_REPOSITORY_URL: https://test.pypi.org/legacy
         TWINE_USERNAME: __token__
         TWINE_TOKEN: ${{ secrets.QL_TESTPYPI_QCLUSTER }}
       run: |
-        twine check dist/*
-        twine upload dist/*
+        twine check artifacts/dist/*
+        twine upload artifacts/dist/*
