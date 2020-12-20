@@ -63,7 +63,7 @@ jobs:
       run: ls -R
     - name: Upload to Test PYPI
       env:
-        TWINE_REPOSITORY_URL: https://test.pypi.org/legacy
+        TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.QL_TESTPYPI_QCLUSTER }}
       run: |
