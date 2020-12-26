@@ -1,6 +1,8 @@
 # QCluster
 Quick Cluster - a simple service registry for fail-over and replication.
 
+![Latest Build](https://github.com/QsonLabs/qcluster/workflows/Package%20and%20Publish%20on%20Master%20Push/badge.svg?branch=master)
+
 ## Context and Problem
 In modern services it is expected that fail-over, replication or both are provided out of the box. Especially in a distributed cloud architecture, where nodes can be spun up on demand, registering new services is an essential part of ensuring both scalability and reliability. There are several robust solutions for service management that include Apache Zookeeper, Istio Service Mesh, and Linkerd. Each of these either implement a proxy for traffic or have complex architecture requirements. Sometimes a service does not want the full suite of features and needs a lightweight way to handle fail-over.
 
@@ -43,6 +45,18 @@ Please keep the following practices in mind when contributing to the project:
 
 - Conform to the flake8 styling guidelines for consistency
 - Strive to add unit tests for new code added
+
+## Pipeline
+
+We are using Github Actions to handle publishing of this package to PyPI. Upon ugprade from Alpha -> Beta -> Production, we will automate builds to be more restrictive and event driven. For now building and publishing is triggered from a manual workflow run. Navigate to the GitHub Actions tab and run the workflow. Workflow runs should be generated from the `master` branch. 
+
+We are hosting QCluster on PyPI (https://pypi.org/project/QCluster/) and run tests on the following architectures:
+
+- Ubuntu Linux (latest)
+- Macos (latest)
+- Windows (latest)
+  
+Support for other operating systems or specific operating systems can be integrated through the Github Actions matrix. 
 
 ## Python Support
 
