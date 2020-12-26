@@ -39,7 +39,7 @@ jobs:
         path: |
           dist
 
-  test_publish:
+  publish:
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -61,6 +61,10 @@ jobs:
           path: artifacts/
     - name: Display structure of downloaded artifacts
       run: ls -R
+    - name: Check artifacts with Twine
+      run: |
+        cd artifacts
+        twine check *
     - name: Upload to Test PYPI
       env:
         TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
@@ -68,5 +72,13 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.QL_TESTPYPI_QCLUSTER }}
       run: |
         cd artifacts
-        twine check *
         twine upload *
+    - name: Upload to PYPI
+      env:
+        TWINE_REPOSITORY_URL: https://upload.pypi.org/legacy/
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.QL_PYPI_QCLUSTER }}
+      run: |
+        cd artifacts
+        twine upload *
+
